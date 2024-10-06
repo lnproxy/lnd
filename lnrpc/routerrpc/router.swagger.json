@@ -1632,7 +1632,8 @@
       "enum": [
         "SETTLE",
         "FAIL",
-        "RESUME"
+        "RESUME",
+        "ADOPT"
       ],
       "default": "SETTLE"
     },

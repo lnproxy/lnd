@@ -181,6 +181,7 @@ func (r *forwardInterceptor) resolveFromClient(
 		if in.Preimage == nil {
 			return ErrMissingPreimage
 		}
+
 		preimage, err := lntypes.MakePreimage(in.Preimage)
 		if err != nil {
 			return err
@@ -190,6 +191,12 @@ func (r *forwardInterceptor) resolveFromClient(
 			Key:      circuitKey,
 			Action:   htlcswitch.FwdActionSettle,
 			Preimage: preimage,
+		})
+
+	case ResolveHoldForwardAction_ADOPT:
+		return r.htlcSwitch.Resolve(&htlcswitch.FwdResolution{
+			Key:    circuitKey,
+			Action: htlcswitch.FwdActionAdopt,
 		})
 
 	default:

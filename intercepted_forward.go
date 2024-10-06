@@ -20,6 +20,10 @@ var (
 	// ErrPreimageMismatch is returned when the preimage that is specified to
 	// settle an htlc doesn't match the htlc hash.
 	ErrPreimageMismatch = errors.New("preimage does not match hash")
+
+	// ErrCannotAdopt is returned when an intercepted forward cannot be adopted.
+	// This is the case in the on-chain resolution flow.
+	ErrCannotAdopt = errors.New("cannot adopt in the on-chain flow")
 )
 
 // interceptedForward implements the on-chain behavior for the resolution of
@@ -77,4 +81,9 @@ func (f *interceptedForward) Settle(preimage lntypes.Preimage) error {
 	// Add preimage to the preimage beacon. The onchain resolver will pick
 	// up the preimage from the beacon.
 	return f.beacon.AddPreimages(preimage)
+}
+
+// Adopt assumes the responsibility of paying the destination.
+func (f *interceptedForward) Adopt() error {
+	return ErrCannotAdopt
 }

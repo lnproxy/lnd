@@ -965,6 +965,7 @@ enum ResolveHoldForwardAction {
     SETTLE = 0;
     FAIL = 1;
     RESUME = 2;
+    ADOPT = 3;
 }
 
 message UpdateChanStatusRequest {

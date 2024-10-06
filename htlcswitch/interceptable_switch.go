@@ -32,6 +32,7 @@ var (
 // Resume - forwards the original request to the switch as is.
 // Settle - routes UpdateFulfillHTLC to the originating link.
 // Fail - routes UpdateFailHTLC to the originating link.
+// Adopt - assumes the responsibility of paying the destination.
 type InterceptableSwitch struct {
 	// htlcSwitch is the underline switch
 	htlcSwitch *Switch
@@ -105,6 +106,9 @@ const (
 
 	// FwdActionFail fails the intercepted packet back to the sender.
 	FwdActionFail
+
+	// FwdActionAdopt assumes the responsibility of paying the destination.
+	FwdActionAdopt
 )
 
 // FwdResolution defines the action to be taken on an intercepted packet.
@@ -382,6 +386,9 @@ func (s *InterceptableSwitch) resolve(res *FwdResolution) error {
 		}
 
 		return intercepted.FailWithCode(res.FailureCode)
+
+	case FwdActionAdopt:
+		return intercepted.Adopt()
 
 	default:
 		return fmt.Errorf("unrecognized action %v", res.Action)
@@ -704,7 +711,42 @@ func (f *interceptedForward) Settle(preimage lntypes.Preimage) error {
 	})
 }
 
-// resolve is used for both Settle and Fail and forwards the message to the
+// Adopt assumes the responsibility of paying the destination.
+func (f *interceptedForward) Adopt() error {
+	update := f.htlcSwitch.failAliasUpdate(
+		f.packet.incomingChanID, true,
+	)
+	if update == nil {
+		// Fallback to the original, non-alias behavior.
+		var err error
+		update, err = f.htlcSwitch.cfg.FetchLastChannelUpdate(
+			f.packet.incomingChanID,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	failureMsg := lnwire.NewTemporaryChannelFailure(update)
+
+	// Encrypt the failure for the first hop. This node will be the origin
+	// of the failure.
+	reason, err := f.packet.obfuscator.EncryptFirstHop(failureMsg)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt failure reason %v", err)
+	}
+
+	err = f.resolve(&lnwire.UpdateFailHTLC{
+		Reason: reason,
+	})
+	if err != nil {
+		return err
+	}
+
+	return f.htlcSwitch.SendHTLC(f.packet.outgoingChanID, f.packet.outgoingHTLCID, f.htlc)
+}
+
+// resolve is used for Settle, Fail, and Adopt and forwards the message to the
 // switch.
 func (f *interceptedForward) resolve(message lnwire.Message) error {
 	pkt := &htlcPacket{
